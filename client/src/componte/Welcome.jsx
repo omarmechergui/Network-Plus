@@ -1,84 +1,89 @@
-import React, { useState, useEffect } from "react";
-import {  useNavigate, useParams } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import axios from 'axios';
 
-// Step 1: Create a reusable Loading component
-const Loading = () => {
-  return (
-    <div style={styles.loadingContainer}>
-      <div style={styles.spinner}></div>
-    </div>
-  );
-};
-
-// Step 2: Main App Component
 const Welcome = () => {
-  const [loading, setLoading] = useState(true); // Initial loading state
-  const {token}=useParams();
-  const navigate =useNavigate()
-  // Simulate fetching data after a delay
-  useEffect( () => {
-    const res= axios.post('http://localhost:5000/api/users/register/'+token)
-    .then((res) => {
-    if(res.status===200){
-        setLoading(false);
-        navigate('/');
-    }})
-    
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const { token } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+    axios
+      .post('http://localhost:5000/api/users/register/' + token)
+      .then((res) => {
+        if (res.status === 200 && isMounted) {
+          setLoading(false);
+          setTimeout(() => {
+            navigate('/Login');
+          }, 1500);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setLoading(false);
+          setError(err.response?.data?.message || 'Verification failed or link expired.');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [token, navigate]);
 
   return (
-    <div style={styles.appContainer}>
-      {loading ? (
-        <Loading /> // Show loading indicator while loading is true
-      ) : (
-    <>
-    </>
-      )}
+    <div className="np-auth-container">
+      <div className="np-auth-card" style={{ textAlign: 'center' }}>
+        <div className="np-auth-brand">
+          <h1 className="np-top-nav-logo" style={{ fontSize: 'var(--font-size-2xl)' }}>
+            Network <span className="np-top-nav-logo-plus">Plus</span>
+          </h1>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-4)', padding: 'var(--space-6) 0' }}>
+            <div className="np-spinner" style={{ width: '40px', height: '40px', borderWidth: '3px' }} />
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-base)' }}>
+              Verifying your account...
+            </p>
+          </div>
+        ) : error ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{
+              padding: 'var(--space-3) var(--space-4)',
+              background: '#FEF2F2',
+              color: '#991B1B',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid #FECACA',
+              fontSize: 'var(--font-size-sm)',
+            }}>
+              <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 'var(--space-2)' }} />
+              {error}
+            </div>
+            <Link to="/Login" className="np-btn np-btn-primary" style={{ marginTop: 'var(--space-2)' }}>
+              Go to Login
+            </Link>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <div style={{
+              padding: 'var(--space-3) var(--space-4)',
+              background: '#ECFDF5',
+              color: '#065F46',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid #A7F3D0',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500,
+            }}>
+              <i className="fa-solid fa-circle-check" style={{ marginRight: 'var(--space-2)' }} />
+              Account verified successfully! Redirecting to login...
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
-
-// Step 3: Define styles (optional)
-const styles = {
-  appContainer: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    height: "100vh",
-    backgroundColor: "#f0f0f0",
-  },
-  loadingContainer: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100px",
-    height: "100px",
-    border: "2px solid #ccc",
-    borderRadius: "50%",
-    position: "relative",
-    overflow: "hidden",
-  },
-  spinner: {
-    width: "40px",
-    height: "40px",
-    borderTop: "4px solid #3498db",
-    borderRight: "4px solid transparent",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
-  },
-  content: {
-    textAlign: "center",
-  },
-};
-
-// CSS keyframes for spinner animation
-const root = document.documentElement;
-root.style.setProperty("--spinner-animation", `
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`);
 
 export default Welcome;

@@ -1,289 +1,273 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
 function Editprofile() {
-  const [userData, setUserData] = useState(null); // State for user profile data
-  const [username, setUsername] = useState(''); // State for username input
-  const [bio, setBio] = useState(''); // State for bio input
-  const [bioLink, setBioLink] = useState(''); // State for bio link input
-  const [profilePicture, setProfilePicture] = useState(null); // State for profile picture file
-  const [loading, setLoading] = useState(true); // State for loading indicator
-  const [error, setError] = useState(null); // State for error messages
-  const [successMessage, setSuccessMessage] = useState(''); // State for success message
-console.log(username)
-  // Fetch user data when the component mounts
+  const navigate = useNavigate();
+  const [username, setUsername] = useState('');
+  const [bio, setBio] = useState('');
+  const [bioLink, setBioLink] = useState('');
+  const [profilePicture, setProfilePicture] = useState(null);
+  const [previewImage, setPreviewImage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+
   useEffect(() => {
+    let isMounted = true;
+
     const fetchUserData = async () => {
       try {
         setLoading(true);
+        const token = localStorage.getItem('token');
         const response = await fetch('http://localhost:5000/api/users/getuser', {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
+            Authorization: token ? `Bearer ${token}` : '',
           },
         });
 
         const data = await response.json();
-        if (response.ok) {
-          setUserData(data.user);
+        if (response.ok && isMounted) {
           setUsername(data.user.username || '');
           setBio(data.user.bio || '');
           setBioLink(data.user.bioLink || '');
-          setProfilePicture(data.user.profilePicture); // Reset profile picture state
-        } else {
+          setProfilePicture(data.user.profilePicture);
+          setPreviewImage(data.user.profilePicture);
+        } else if (isMounted) {
           throw new Error(data.message || 'Failed to fetch profile data.');
         }
       } catch (err) {
-        setError(err.message);
+        if (isMounted) {
+          setError(err.message);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchUserData();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // Handle form submission
+  const handleProfilePictureChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Show instant local preview
+    const localUrl = URL.createObjectURL(file);
+    setPreviewImage(localUrl);
+
+    try {
+      setUploading(true);
+      setError(null);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', 'ml_default');
+
+      const res = await axios.post('https://api.cloudinary.com/v1_1/ddedv1njr/upload', formData);
+      if (res.data && res.data.secure_url) {
+        setProfilePicture(res.data.secure_url);
+        setPreviewImage(res.data.secure_url);
+      }
+    } catch (uploadErr) {
+      setError('Failed to upload image to cloud storage. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username.trim()) {
       setError('Username cannot be empty.');
       return;
     }
+
     try {
-     
-      const response = await axios.put('http://localhost:5000/api/users/updateprofile', {username, bio, bioLink, profilePicture}, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        
-        },
-      });
-      console.log(response.data);
+      setSaving(true);
+      setError(null);
+      setSuccessMessage('');
+
+      const token = localStorage.getItem('token');
+      const response = await axios.put(
+        'http://localhost:5000/api/users/updateprofile',
+        { username, bio, bioLink, profilePicture },
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : '',
+          },
+        }
+      );
+
       if (response.data.success) {
         setSuccessMessage('Profile updated successfully!');
-        setError(null); // Clear any previous errors
+        setTimeout(() => {
+          navigate('/Profile');
+        }, 1200);
       } else {
         throw new Error(response.data.message || 'Failed to update profile.');
       }
     } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // Handle profile picture change
-  const handleProfilePictureChange = async(e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setLoading(true)
-       // Generate a preview URL for the selected media with cloudinary
-       const formData = new FormData()
-       formData.append('file', file)
-       formData.append('upload_preset', 'ml_default')
-       const res = await axios.post('https://api.cloudinary.com/v1_1/ddedv1njr/upload', formData)
- 
-       console.log(res)
-       setProfilePicture(res.data.secure_url);
-       setLoading(false)
-       
-      
+      setError(err.response?.data?.message || err.message || 'Error updating profile.');
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div
-      style={{
-        maxWidth: '600px',
-        margin: '50px auto',
-        padding: '20px',
-        backgroundColor: '#f9f9f9',
-        border: '1px solid #ddd',
-        borderRadius: '8px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-      }}
-    >
-      {/* Loading Indicator */}
-      {loading && (
-        <p
-          style={{
-            textAlign: 'center',
-            fontSize: '18px',
-            color: '#555',
-            margin: '20px 0',
-          }}
-        >
-          Loading profile...
-        </p>
-      )}
-      {/* Error Message */}
-      {error && (
-        <p
-          style={{
-            textAlign: 'center',
-            color: 'red',
-            fontSize: '16px',
-            margin: '10px 0',
-          }}
-        >
-          {error}
-        </p>
-      )}
-      {/* Success Message */}
-      {successMessage && (
-        <p
-          style={{
-            textAlign: 'center',
-            color: 'green',
-            fontSize: '16px',
-            margin: '10px 0',
-          }}
-        >
-          {successMessage}
-        </p>
-      )}
-      {/* Edit Profile Form */}
-      {userData ? (
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <h2
-            style={{
-              fontSize: '24px',
-              marginBottom: '20px',
-              color: '#333',
-              textAlign: 'center',
-            }}
-          >
-            Edit Profile
-          </h2>
-          {/* Username Input */}
-          <label
-            style={{
-              marginBottom: '15px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
-            Username:
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '16px',
-              }}
-            />
-          </label>
-          {/* Bio Input */}
-          <label
-            style={{
-              marginBottom: '15px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
-            Bio:
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Tell us about yourself"
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '16px',
-                resize: 'vertical',
-                minHeight: '100px',
-              }}
-            />
-          </label>
-          {/* Bio Link Input */}
-          <label
-            style={{
-              marginBottom: '15px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
-            Bio Link:
-            <input
-              type="url"
-              value={bioLink}
-              onChange={(e) => setBioLink(e.target.value)}
-              placeholder="Enter a link to your website or social media"
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '16px',
-              }}
-            />
-          </label>
-          {/* Profile Picture Upload */}
-          <label
-            style={{
-              marginBottom: '15px',
-              fontWeight: 'bold',
-              color: '#555',
-            }}
-          >
-            Profile Picture:
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleProfilePictureChange}
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginTop: '5px',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                fontSize: '16px',
-              }}
-            />
-          </label>
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              fontSize: '16px',
-              cursor: 'pointer',
-              transition: 'background-color 0.3s ease',
-              ...(successMessage && { backgroundColor: '#0056b3' }),
-            }}
-          >
-            Save Changes
-          </button>
-        </form>
+    <div className="np-profile-page">
+      <div className="np-profile-top-bar">
+        <Link to="/Profile" className="np-btn np-btn-ghost np-btn-icon" aria-label="Cancel">
+          <i className="fa-solid fa-arrow-left" />
+        </Link>
+        <h2 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, margin: 0 }}>Edit Profile</h2>
+        <div style={{ width: '40px' }} />
+      </div>
+
+      {loading ? (
+        <div className="np-loading-state" style={{ minHeight: '200px' }}>
+          <div className="np-spinner" />
+          <p>Loading profile details...</p>
+        </div>
       ) : (
-        <p
-          style={{
-            textAlign: 'center',
-            fontSize: '18px',
-            color: '#555',
-            margin: '20px 0',
-          }}
-        >
-          Loading user data...
-        </p>
+        <div className="np-edit-profile-card">
+          {successMessage && (
+            <div style={{
+              padding: 'var(--space-3) var(--space-4)',
+              background: '#ECFDF5',
+              color: '#065F46',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid #A7F3D0',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500,
+            }}>
+              <i className="fa-solid fa-circle-check" style={{ marginRight: 'var(--space-2)' }} />
+              {successMessage}
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              padding: 'var(--space-3) var(--space-4)',
+              background: '#FEF2F2',
+              color: '#991B1B',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid #FECACA',
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 500,
+            }}>
+              <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 'var(--space-2)' }} />
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)' }}>
+            {/* Avatar Upload Section */}
+            <div className="np-avatar-edit-wrap">
+              <img
+                src={previewImage || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png'}
+                alt="Profile preview"
+                className="np-profile-avatar-lg"
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                <label
+                  htmlFor="avatar-upload"
+                  className={`np-btn np-btn-secondary ${uploading ? 'disabled' : ''}`}
+                  style={{ cursor: uploading ? 'wait' : 'pointer', width: 'fit-content' }}
+                >
+                  <i className="fa-solid fa-camera" />
+                  {uploading ? 'Uploading...' : 'Change Photo'}
+                </label>
+                <input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleProfilePictureChange}
+                  disabled={uploading}
+                  style={{ display: 'none' }}
+                />
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
+                  PNG, JPG, or WEBP. Max 5MB.
+                </span>
+              </div>
+            </div>
+
+            {/* Username Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <label htmlFor="username" className="np-form-label" style={{ fontWeight: 600 }}>
+                Username
+              </label>
+              <input
+                id="username"
+                type="text"
+                className="np-form-input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username"
+                required
+              />
+            </div>
+
+            {/* Bio Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <label htmlFor="bio" className="np-form-label" style={{ fontWeight: 600 }}>
+                Bio
+              </label>
+              <textarea
+                id="bio"
+                className="np-form-textarea"
+                rows="3"
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Write something about yourself..."
+              />
+            </div>
+
+            {/* Bio Link Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+              <label htmlFor="bioLink" className="np-form-label" style={{ fontWeight: 600 }}>
+                Website or Portfolio Link
+              </label>
+              <input
+                id="bioLink"
+                type="url"
+                className="np-form-input"
+                value={bioLink}
+                onChange={(e) => setBioLink(e.target.value)}
+                placeholder="https://yourwebsite.com"
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-2)' }}>
+              <button
+                type="submit"
+                disabled={saving || uploading}
+                className="np-btn np-btn-primary"
+                style={{ flex: 1 }}
+              >
+                {saving ? (
+                  <>
+                    <div className="np-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </button>
+              <Link to="/Profile" className="np-btn np-btn-outline">
+                Cancel
+              </Link>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

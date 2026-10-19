@@ -1,153 +1,210 @@
-import axios from 'axios'
-import React, { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import React, { useState } from 'react';
+import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 function Sersh() {
-    const [isFollowing, setIsFollowing] = useState(false)
-    const [search, setSearch] = useState('')
-    const [filter, setFilter] = useState('all')
-    const [show, setshow] = useState(false)
-    const [usersData, setUsersData] = useState(null); // State for user profile data
-    const [posts, setPosts] = useState([]); // State for user posts
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-      const [category, setCategory] = useState('');
-    
-    console.log(search)
-    const fetchsearch = async (e) => {
-        e.preventDefault()
-        try {
-            setLoading(true);
-            const response = await axios.post('http://localhost:5000/api/posts/search', { query: search }, {
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [usersData, setUsersData] = useState([]);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
-                headers: {
-                    Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-                },
-            });
+  const fetchsearch = async (e) => {
+    if (e) e.preventDefault();
+    const query = search.trim();
+    if (!query) return;
 
-            console.log(response)
-            if (response.status == 200) {
-                setPosts(response.data.posts);
-                setUsersData(response.data.users);
-            } else {
-                throw new Error(response.data.message || 'Failed to fetch posts.');
-            }
-        } catch (err) {
-            console.log(err)
-            setError(err.message);
-        } finally {
-            setLoading(false);
+    try {
+      setLoading(true);
+      setError(null);
+      setHasSearched(true);
+
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        'http://localhost:5000/api/posts/search',
+        { query },
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : '',
+          },
         }
-    };
+      );
 
-    const handleFollow = () => {
-        setIsFollowing(!isFollowing)
+      if (response.status === 200) {
+        setPosts(response.data.posts || []);
+        setUsersData(response.data.users || []);
+      } else {
+        throw new Error(response.data.message || 'Failed to fetch search results.');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || 'Error occurred while searching.');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const handleSearch = (e) => {
-        setSearch(e.target.value)
-    }
+  const filteredPosts = posts.filter((post) => {
+    if (!post || !post.picture) return false;
+    const ext = post.picture.split('.').at(-1)?.toLowerCase();
+    if (category === '') return true;
+    if (category === 'videos') return ext === 'mp4' || ext === 'webm' || ext === 'mov';
+    if (category === 'images') return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+    return true;
+  });
 
-    const handleFilter = (filter) => {
-        setFilter(filter)
-    }
+  return (
+    <div className="np-search-page">
+      {/* Search Header and Input */}
+      <div className="np-search-bar-wrap">
+        <form onSubmit={fetchsearch} style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <i
+              className="fa-solid fa-magnifying-glass"
+              style={{
+                position: 'absolute',
+                left: 'var(--space-3)',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--color-text-secondary)',
+                fontSize: 'var(--font-size-sm)',
+              }}
+            />
+            <input
+              type="search"
+              className="np-form-input"
+              style={{ paddingLeft: 'calc(var(--space-3) * 2 + 14px)' }}
+              placeholder="Search posts, hashtags, or users..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <button type="submit" disabled={loading || !search.trim()} className="np-btn np-btn-primary">
+            {loading ? (
+              <div className="np-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+            ) : (
+              'Search'
+            )}
+          </button>
+        </form>
 
-    return (
-        <div style={{ width: '100%', overflowY: 'auto', height: '100vh', overflowX: 'hidden' }}>
-            <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center', padding: "10px" }}>
-                <div className="group">
-                    <svg className="icon" aria-hidden="true" viewBox="0 0 24 24">
-                        <g>
-                            <path d="M21.53 20.47l-3.66-3.66C19.195 15.24 20 13.214 20 11c0-4.97-4.03-9-9-9s-9 4.03-9 9 4.03 9 9 9c2.215 0 4.24-.804 5.808-2.13l3.66 3.66c.147.146.34.22.53.22s.385-.073.53-.22c.295-.293.295-.767.002-1.06zM3.5 11c0-4.135 3.365-7.5 7.5-7.5s7.5 3.365 7.5 7.5-3.365 7.5-7.5 7.5-7.5-3.365-7.5-7.5z" />
-                        </g>
-                    </svg>
-                    <form action="" style={{ width: "100%" }} onSubmit={fetchsearch}>
-
-                        <input onChange={handleSearch} placeholder="Search" type="search" className="input" />
-                    </form>
-                </div>
-            </div>
-
-
-            <div style={{ display: 'flex', gap: '10px', width: '100%', justifyContent: 'center' }}>
-                <button onClick={() => setCategory('')} style={{ backgroundColor: category === '' ? 'blue' : 'white', color: category === '' ? 'white' : 'black', width: '100px', height: '30px', borderRadius: '5px' }}>all<i class="fa-solid fa-caret-down"></i></button>
-                <button onClick={() => setCategory('videos')} style={{ backgroundColor: category === 'videos' ? 'blue' : 'white', color: category === 'videos' ? 'white' : 'black', width: '100px', height: '30px', borderRadius: '5px' }}>videos<i class="fa-solid fa-caret-down"></i></button>
-                <button onClick={() => setCategory('images')} style={{ backgroundColor: category === 'images' ? 'blue' : 'white', color: category === 'images' ? 'white' : 'black', width: '100px', height: '30px', borderRadius: '5px' }}>posts<i class="fa-solid fa-caret-down"></i></button>
-            </div>
-            
-            <div data-aos="zoom-in">
-                <div style={{ display: 'flex', gap: '10px', width: '100vw', overflowX: 'visible', marginTop: '20px', }}>
-                    {usersData?.map((user) => <div style={{ gap: '10px', width: '14.5rem', border: '3px solid #000a1a', borderRadius: '10px', boxShadow: '0 0 10px rgba(27, 27, 27, 0.16)', padding: '10px' }}>
-                        <Link to={"/User/" + user._id} style={{ textDecoration: 'none' }}>
-                            <div style={{ height: '100px', alignItems: 'end', display: 'flex', gap: '10px', backgroundImage: 'url("https://e0.pxfuel.com/wallpapers/651/1001/desktop-wallpaper-abstract-background.jpg")', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', borderRadius: '10px' }}>
-                                <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png"
-                                    alt=""
-                                    style={{ width: '50px', height: '50px', borderRadius: '50%', border: '2px solid #3333337a', boxShadow: '0 0 3px rgba(0, 0, 0, 0.3)', }} />
-                                <h3>{user.username}</h3>
-                            </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <div>
-                                    <h2>{user?.followers?.length}</h2>
-                                    <p>followers</p>
-                                </div>
-                                <div>
-                                    <h2>{user?.following?.length}</h2>
-                                    <p>following</p>
-                                </div>
-                            </div>
-                        </Link>
-                        <div>
-                            <p>{user.description}</p>
-
-                        </div>
-                    </div>)}
-
-
-
-                </div>
-                <hr />
-
-
-
-                <div style={{ display: 'flex', gap: '5px', width: '100%', flexWrap: 'wrap', justifyContent: 'center' }}>
-
-                    {posts.filter((post) => category == "" ? post : category == "videos" ? post.picture.split('.').at(-1) == "mp4" : category == "images" ? post.picture.split('.').at(-1) == "jpg" || post.picture.split('.').at(-1) == "png" || post.picture.split('.').at(-1) == "jpeg" : null).map((post) => (
-                        <div id='card_serch' style={{ width: '14rem', maxHeight: '18rem', border: '3px solid #000a1a', borderRadius: '10px', boxShadow: '0 0 5px rgba(27, 27, 27, 0.16)', padding: '10px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <a href={`/User/${post?.userId?._id}`} style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <img
-                                        src={post.userId.profilePicture}
-                                        alt={`${post.username}'s profile`}
-
-                                        style={{ width: '50px', height: '50px', borderRadius: '50%' }}
-                                    />
-
-                                    <h3 style={{ fontWeight: "bold" }}>{post?.userId?.username}</h3>
-                                </a>
-
-                            </div>
-                            <Link to={`/Openpost/${post._id}`}>
-                                {post.picture.split('.').at(-1) == "mp4" ? (
-                                    <video
-                                        id="img_post" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '10px' }}
-                                        src={post.picture} controls></video>) : (
-                                    <img
-                                        id="img_post" style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '10px' }}
-                                        src={post.picture} alt="" />
-                                )
-                                }
-                            </Link>
-
-                            <p>{post.description}</p>
-
-                        </div>
-                    ))}
-                </div>
-
-            </div>
+        {/* Filter Pills */}
+        <div className="np-search-filter-pills">
+          <button
+            type="button"
+            className={`np-btn np-btn-sm ${category === '' ? 'np-btn-primary' : 'np-btn-outline'}`}
+            onClick={() => setCategory('')}
+          >
+            All Results
+          </button>
+          <button
+            type="button"
+            className={`np-btn np-btn-sm ${category === 'videos' ? 'np-btn-primary' : 'np-btn-outline'}`}
+            onClick={() => setCategory('videos')}
+          >
+            <i className="fa-solid fa-film" /> Videos
+          </button>
+          <button
+            type="button"
+            className={`np-btn np-btn-sm ${category === 'images' ? 'np-btn-primary' : 'np-btn-outline'}`}
+            onClick={() => setCategory('images')}
+          >
+            <i className="fa-regular fa-images" /> Photos
+          </button>
         </div>
+      </div>
 
-    )
+      {/* Error State */}
+      {error && (
+        <div className="np-error-state">
+          <i className="fa-solid fa-circle-exclamation np-error-state-icon" />
+          <p className="np-error-state-title">{error}</p>
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="np-loading-state" style={{ minHeight: '200px' }}>
+          <div className="np-spinner" />
+          <p>Searching Network Plus...</p>
+        </div>
+      )}
+
+      {/* Not Searched Yet State */}
+      {!hasSearched && !loading && (
+        <div className="np-empty-state" style={{ minHeight: '260px' }}>
+          <i className="fa-solid fa-magnifying-glass np-empty-state-icon" />
+          <p className="np-empty-state-title">Explore Network Plus</p>
+          <p className="np-empty-state-subtitle">Type a query above to discover creators, posts, and topics.</p>
+        </div>
+      )}
+
+      {/* Results Section */}
+      {hasSearched && !loading && (
+        <>
+          {/* Matching Users */}
+          {usersData.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+              <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                People ({usersData.length})
+              </h3>
+              <div className="np-search-users-carousel">
+                {usersData.map((user) => (
+                  <Link to={`/User/${user._id}`} key={user._id} className="np-user-card">
+                    <img
+                      src={user.profilePicture || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png'}
+                      alt={`${user.username}'s avatar`}
+                      className="np-user-card-avatar"
+                    />
+                    <span className="np-user-card-username">{user.username}</span>
+                    <div className="np-user-card-stats">
+                      <span>{user.followers?.length || 0} followers</span>
+                      <span>{user.following?.length || 0} following</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Matching Posts */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+            <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              Posts ({filteredPosts.length})
+            </h3>
+
+            {filteredPosts.length === 0 ? (
+              <div className="np-empty-state" style={{ minHeight: '180px' }}>
+                <i className="fa-regular fa-folder-open np-empty-state-icon" />
+                <p className="np-empty-state-title">No posts found</p>
+                <p className="np-empty-state-subtitle">Try adjusting your search terms or filter.</p>
+              </div>
+            ) : (
+              <div className="np-profile-grid">
+                {filteredPosts.map((post) => {
+                  const isVideo = ['mp4', 'webm', 'mov'].includes(post.picture?.split('.').at(-1)?.toLowerCase());
+                  return (
+                    <Link
+                      to={`/Openpost/${post._id}`}
+                      key={post._id}
+                      className="np-profile-grid-item"
+                    >
+                      {isVideo ? (
+                        <video src={post.picture} muted playsInline />
+                      ) : (
+                        <img src={post.picture} alt={post.description || 'Post thumbnail'} loading="lazy" />
+                      )}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
-export default Sersh
+export default Sersh;

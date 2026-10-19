@@ -1,128 +1,101 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Findpost from './Findpost';
-function randomizeItems(array) {
-  // Create a copy of the array to avoid mutating the original array
-  const shuffledArray = [...array];
-
-  // Implement the Fisher-Yates Shuffle Algorithm
-  for (let i = shuffledArray.length - 1; i > 0; i--) {
-    // Generate a random index between 0 and i (inclusive)
-    const j = Math.floor(Math.random() * (i + 1));
-
-    // Swap the elements at indices i and j
-    [shuffledArray[i], shuffledArray[j]] = [shuffledArray[j], shuffledArray[i]];
-  }
-
-  return shuffledArray;
-}
 
 function Post() {
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [userData, setUserData] = useState(null);
 
-
-    
-
-
-  const [posts, setPosts] = useState([]); // State for posts fetched from the backend
-  const [loading, setLoading] = useState(true); // State for loading indicator
-  const [error, setError] = useState(null); // State for error messages
-
-  // State to manage follow status, comments, and share modal for each post
-  const [postStates, setPostStates] = useState({});
-  const [shares, setShares] = useState([]);
-  console.log(shares)
-  // State to store the comment input for each post
-  const [commentInputs, setCommentInputs] = useState({});
-  console.log(posts)
-  // Fetch posts from the backend when the component mounts
   const fetchPosts = async () => {
     try {
       setLoading(true);
+      setError(null);
+      const token = localStorage.getItem('token');
       const response = await fetch('http://localhost:5000/api/posts', {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
+          Authorization: `Bearer ${token}`,
         },
       });
       const data = await response.json();
-      console.log(data)
       if (response.ok) {
-        setPosts(data);
+        setPosts(Array.isArray(data) ? data : []);
       } else {
         throw new Error(data.message || 'Failed to fetch posts.');
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Network error fetching posts');
     } finally {
       setLoading(false);
     }
   };
-  
+
+  const fetchUserData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await fetch('http://localhost:5000/api/users/getuser', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setUserData(data.user);
+      }
+    } catch (err) {
+      console.error('Failed to fetch user data:', err.message);
+    }
+  };
 
   useEffect(() => {
-
     fetchPosts();
+    fetchUserData();
   }, []);
 
-  // Handle follow/unfollow button toggle
- 
-
-  // Handle share post
-  // const handleSharePost = async (postId) => {
-  //   try {
-  //     const response = await fetch(`http://localhost:5000/api/posts/${postId}/share`, {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-  //       },
-  //     });
-
-  //     const data = await response.json();
-  //     if (response.ok) {
-  //       // Update the local state with the new share count
-  //       setPosts((prevPosts) =>
-  //         prevPosts.map((post) =>
-  //           post._id === postId ? { ...post, shares: data.newShareCount } : post
-  //         )
-  //       );
-  //     } else {
-  //       throw new Error(data.message || 'Failed to share post.');
-  //     }
-  //   } catch (err) {
-  //     console.error('Error sharing post:', err.message);
-  //     alert('Failed to share post. Please try again.');
-  //   }
-  // };
-
   return (
-    <div id="body_post">
-      {/* Loading Indicator */}
-      {loading && <p className="loading">Loading posts...</p>}
+    <main className="np-feed-column" id="body_post">
+      {/* Loading State */}
+      {loading && (
+        <div className="np-feed-state">
+          <div className="np-spinner" role="status" aria-label="Loading posts" />
+          <p className="np-feed-state-title">Loading feed...</p>
+        </div>
+      )}
 
-      {/* Error Message */}
-      {error && (
-        <div>
-          <p className="error">{error}</p>
-          <button onClick={() => window.location.reload()}>Retry</button>
+      {/* Error State */}
+      {error && !loading && (
+        <div className="np-feed-state">
+          <i className="fa-solid fa-triangle-exclamation np-feed-state-icon" style={{ color: 'var(--color-danger)' }} />
+          <p className="np-feed-state-title">Unable to load posts</p>
+          <p className="np-feed-state-desc">{error}</p>
+          <button type="button" className="btn-secondary" onClick={fetchPosts}>
+            <i className="fa-solid fa-rotate-right" /> Try Again
+          </button>
         </div>
       )}
 
       {/* Posts Section */}
-      <section id="section1_post">
-        {posts.length > 0 ? (
-          posts.map((post) => 
-
-            
-          
-          <Findpost post={post} fetchPosts={fetchPosts}/>
-           
-          )
-        ) : (
-          <p style={{ textAlign: 'center', color: '#888', margin: '20px' }}>
-            No posts available.
-          </p>
-        )}
-      </section>
-    </div>
+      {!loading && !error && (
+        <section id="section1_post" aria-label="Posts Feed">
+          {posts.length > 0 ? (
+            posts.map((post) => (
+              <Findpost key={post._id} post={post} fetchPosts={fetchPosts} userData={userData} />
+            ))
+          ) : (
+            <div className="np-feed-state">
+              <i className="fa-regular fa-newspaper np-feed-state-icon" />
+              <p className="np-feed-state-title">No posts yet</p>
+              <p className="np-feed-state-desc">Be the first to share an update with the community!</p>
+              <Link to="/Add" className="btn-primary" style={{ marginTop: 'var(--space-2)' }}>
+                <i className="fa-solid fa-plus" /> Create Post
+              </Link>
+            </div>
+          )}
+        </section>
+      )}
+    </main>
   );
 }
 

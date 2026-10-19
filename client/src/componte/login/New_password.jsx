@@ -1,48 +1,44 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 function New_password() {
   const navigate = useNavigate();
 
-  // State for form inputs
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
   });
 
-  // State for error and success messages
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Get the reset token from the URL query parameters
   const queryParams = new URLSearchParams(window.location.search);
   const resetToken = queryParams.get('token');
 
-  // Handle input changes
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Prevent default form submission behavior
+    e.preventDefault();
 
     try {
-      // Clear previous messages
       setErrorMessage('');
       setSuccessMessage('');
 
-      // Validate password match
       if (formData.password !== formData.confirmPassword) {
         return setErrorMessage('Passwords do not match');
       }
 
       if (!resetToken) {
-        return setErrorMessage('Reset token is missing.');
+        return setErrorMessage('Reset token is missing from the URL.');
       }
 
-      // Send password reset request to the backend
-      const response = await fetch(`http://192.168.1.92:5000/api/users/reset-password`, {
+      setLoading(true);
+
+      const response = await fetch(`http://localhost:5000/api/users/reset-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -56,53 +52,125 @@ function New_password() {
       const data = await response.json();
 
       if (response.ok) {
-        // Successful password reset
-        setSuccessMessage('Password reset successfully! You can now log in.');
+        setSuccessMessage('Password reset successfully! Redirecting to login...');
         setTimeout(() => {
-          navigate('/Login', { replace: true }); // Redirect to login page after 2 seconds
-        }, 2000);
+          navigate('/Login');
+        }, 1500);
       } else {
-        // Failed password reset
-        setErrorMessage(data.message || 'An error occurred during password reset.');
+        setErrorMessage(data.message || 'Failed to reset password. The link may have expired.');
       }
     } catch (error) {
-      console.error('Error during password reset:', error);
       setErrorMessage('An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div id="body_forget_password">
-      <form id="form_forget_password" onSubmit={handleSubmit}>
-        <fieldset>
-          <legend style={{ textAlign: 'center', fontSize: '20px', fontWeight: 'bold', marginBottom: '20px', marginTop: '20px', }}>Set New Password</legend>
-          <label htmlFor="password">Password:</label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            required
-            value={formData.password}
-            onChange={handleChange}
-          />
-          <label htmlFor="confirmPassword">Confirm Password:</label>
-          <input
-            type="password"
-            id="confirmPassword"
-            name="confirmPassword"
-            required
-            value={formData.confirmPassword}
-            onChange={handleChange}
-          />
-          <input type="submit" defaultValue="Submit" />
-        </fieldset>
+    <div className="np-auth-container">
+      <div className="np-auth-card">
+        <div className="np-auth-brand">
+          <h1 className="np-top-nav-logo" style={{ fontSize: 'var(--font-size-2xl)' }}>
+            Network <span className="np-top-nav-logo-plus">Plus</span>
+          </h1>
+        </div>
 
-        {/* Error Message */}
-        {errorMessage && <p className="error-message" style={{ color: 'red' }}>{errorMessage}</p>}
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, margin: 0 }}>Create New Password</h2>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', marginTop: 'var(--space-1)' }}>
+            Please enter and confirm your new password
+          </p>
+        </div>
 
-        {/* Success Message */}
-        {successMessage && <p className="success-message" style={{ color: 'green' }}>{successMessage}</p>}
-      </form>
+        {errorMessage && (
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            background: '#FEF2F2',
+            color: '#991B1B',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid #FECACA',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 'var(--space-2)' }} />
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div style={{
+            padding: 'var(--space-3) var(--space-4)',
+            background: '#ECFDF5',
+            color: '#065F46',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid #A7F3D0',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            <i className="fa-solid fa-circle-check" style={{ marginRight: 'var(--space-2)' }} />
+            {successMessage}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="np-auth-form">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label htmlFor="password" className="np-form-label" style={{ fontWeight: 600 }}>New Password</label>
+              <button
+                type="button"
+                className="np-btn np-btn-ghost np-btn-sm"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{ padding: '0 4px', fontSize: 'var(--font-size-xs)' }}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              name="password"
+              required
+              className="np-form-input"
+              value={formData.password}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+            <label htmlFor="confirmPassword" className="np-form-label" style={{ fontWeight: 600 }}>Confirm Password</label>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="confirmPassword"
+              name="confirmPassword"
+              required
+              className="np-form-input"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="np-btn np-btn-primary"
+            style={{ width: '100%', marginTop: 'var(--space-2)' }}
+          >
+            {loading ? (
+              <>
+                <div className="np-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />
+                Updating password...
+              </>
+            ) : (
+              'Reset Password'
+            )}
+          </button>
+        </form>
+
+        <p style={{ textAlign: 'center', fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)', margin: 0 }}>
+          Back to{' '}
+          <Link to="/Login" style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>
+            Sign in
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

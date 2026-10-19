@@ -1,271 +1,301 @@
 import React, { useState, useEffect } from 'react';
-import Modal from './Modal';
 import { Link, useParams } from 'react-router-dom';
+import Modal from './Modal';
 
 function User() {
   const { id } = useParams();
-  const [userData, setUserData] = useState(null); // State for user profile data
-  const [userconnect, setUserconnect] = useState(null); // State for user profile data
-  const [posts, setPosts] = useState([]); // State for user posts
-  const [loading, setLoading] = useState(true); // State for loading indicator
-  const [error, setError] = useState(null); // State for error messages
-  const [showModal, setShowModal] = useState(false); // State for modal visibility
-  const [selectedImage, setSelectedImage] = useState(null); // State for selected post image
-    const [category, setCategory] = useState('');
-  
-  const [isFollowing, setIsFollowing] = useState(false); // State for follow/unfollow status
-  const fetchUserconnect = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/users/getuser', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-        },
-      });
-      
-      const data = await response.json();
-      console.log(data);
-      if (response.ok) {
-        setUserconnect(data.user);
-         
-      } else {
-        throw new Error(data.message || 'Failed to fetch profile data.');
-      }
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  // Fetch user data and posts from the backend when the component mounts
+  const [userData, setUserData] = useState(null);
+  const [userconnect, setUserconnect] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [category, setCategory] = useState('');
+  const [isFollowing, setIsFollowing] = useState(false);
+
   useEffect(() => {
-    const fetchUserData = async () => {
+    let isMounted = true;
+
+    const fetchProfileData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:5000/api/users/profile/${id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-          },
-        });
+        setError(null);
 
-        const data = await response.json();
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-        if (response.ok) {
-          setUserData(data.user);
-          setPosts(data.posts || []);
-          setIsFollowing(data.user.following.includes(id)); // Set initial follow status
-        } else {
-          throw new Error(data.message || 'Failed to fetch profile data.');
+        // Fetch logged in user to check follow status
+        const currentUserRes = await fetch('http://localhost:5000/api/users/getuser', { headers });
+        const currentUserData = await currentUserRes.json();
+        if (isMounted && currentUserRes.ok) {
+          setUserconnect(currentUserData.user);
+        }
+
+        // Fetch viewed user's profile and posts
+        const userRes = await fetch(`http://localhost:5000/api/users/profile/${id}`, { headers });
+        const userDataJson = await userRes.json();
+
+        if (!userRes.ok) {
+          throw new Error(userDataJson.message || 'Failed to fetch user profile.');
+        }
+
+        if (isMounted) {
+          setUserData(userDataJson.user);
+          setPosts(userDataJson.posts || []);
+
+          // Check if current user is following this user
+          const currentUserFollowing = currentUserData?.user?.following || [];
+          const followingStatus = currentUserFollowing.some((f) =>
+            typeof f === 'object' ? f._id === id : f === id
+          );
+          setIsFollowing(followingStatus);
         }
       } catch (err) {
-        setError(err.message);
+        if (isMounted) {
+          setError(err.message || 'Error loading profile.');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchUserData();
-    fetchUserconnect()
+    fetchProfileData();
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
-  // Handle post click to open modal
-  const handlePostClick = (src) => {
-    setSelectedImage(src);
-    setShowModal(true);
+  const handleFollowToggle = async () => {
+    if (!userconnect || actionLoading) return;
+
+    try {
+      setActionLoading(true);
+      const action = isFollowing ? 'unfollow' : 'follow';
+      const token = localStorage.getItem('token');
+
+      // Optimistically update UI
+      setIsFollowing((prev) => !prev);
+      setUserData((prev) => {
+        if (!prev) return prev;
+        const currentFollowers = prev.followers || [];
+        const updatedFollowers = isFollowing
+          ? currentFollowers.filter((fId) => (typeof fId === 'object' ? fId._id !== userconnect._id : fId !== userconnect._id))
+          : [...currentFollowers, userconnect._id];
+        return { ...prev, followers: updatedFollowers };
+      });
+
+      const response = await fetch(`http://localhost:5000/api/users/${id}/${action}`, {
+        method: 'POST',
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        // Rollback on failure
+        setIsFollowing((prev) => !prev);
+      }
+    } catch (err) {
+      // Rollback on error
+      setIsFollowing((prev) => !prev);
+    } finally {
+      setActionLoading(false);
+    }
   };
 
-  // Handle modal close
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedImage(null);
   };
 
-  // Handle follow/unfollow functionality
-  const handleFollow = async () => {
-    try {
-      setLoading(true);
-
-      // Toggle the local state immediately for better UX
-      setIsFollowing((prev) => !prev);
-
-      // Determine the method based on current follow status
-      const method =  'POST';
-
-      // Make the API call to update follow status
-      const response = await fetch(`http://localhost:5000/api/users/${id}/${userconnect.following.includes(id) ? 'unfollow' : 'follow'}`, {
-        method,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to update follow status.');
-      }
-
-      console.log('Follow status updated successfully');
-    } catch (error) {
-      console.error('Error updating follow status:', error);
-
-      // Revert the local state change if the API call fails
-      setIsFollowing((prev) => !prev);
-      alert('An error occurred while updating the follow status.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filteredPosts = posts.filter((post) => {
+    if (!post || !post.picture) return false;
+    const ext = post.picture.split('.').at(-1)?.toLowerCase();
+    if (category === '') return true;
+    if (category === 'videos') return ext === 'mp4' || ext === 'webm' || ext === 'mov';
+    if (category === 'images') return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+    return true;
+  });
 
   return (
-    <div id="body_profile">
-      {/* Loading Indicator */}
-      {loading && <p className="loading">Loading profile...</p>}
-      {/* Error Message */}
-      {error && <p className="error">{error}</p>}
-      {/* Header */}
-      <header id="header_profile">
-        <div>
-          <a id="a_profile" href="/Home">
-            <i className="fa-solid fa-arrow-left" />
-          </a>
-          <span>
-            <h1 id="network">
-              Network <span id="plus">Plus</span>
-            </h1>
-          </span>
+    <div className="np-profile-page">
+      {/* Top Header Bar */}
+      <div className="np-profile-top-bar">
+        <Link to="/" className="np-btn np-btn-ghost np-btn-icon" aria-label="Go back">
+          <i className="fa-solid fa-arrow-left" />
+        </Link>
+        <h1 className="np-top-nav-logo" style={{ margin: 0 }}>
+          Network <span className="np-top-nav-logo-plus">Plus</span>
+        </h1>
+        <div style={{ width: '40px' }} />
+      </div>
+
+      {loading && (
+        <div className="np-loading-state" style={{ minHeight: '200px' }}>
+          <div className="np-spinner" />
+          <p>Loading profile...</p>
         </div>
-      </header>
-      {/* Profile Section */}
-      {userData ? (
+      )}
+
+      {error && (
+        <div className="np-error-state">
+          <i className="fa-solid fa-circle-exclamation np-error-state-icon" />
+          <p className="np-error-state-title">{error}</p>
+          <Link to="/" className="np-btn np-btn-primary">
+            Back to Home
+          </Link>
+        </div>
+      )}
+
+      {!loading && userData && (
         <>
-          <section id="section1_profile">
-            <div id="div_profile">
-              <div>
+          {/* Profile Header Card */}
+          <section className="np-profile-header-card">
+            <div className="np-profile-main-info">
+              <div className="np-profile-avatar-wrap">
                 <img
-                  src={userData.profilePicture}
+                  src={userData.profilePicture || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png'}
                   alt={`${userData.username}'s profile`}
-                  id="profile_image"
+                  className="np-profile-avatar-lg"
                 />
-                <br />
-                <h3 id="username">{userData.username}</h3>
               </div>
-              <div id="div1_profile">
-                <div>
-                  <h2>{userData.followers.length || 0}</h2>
-                  <p>followers</p>
-                </div>
-                <div>
-                  <h2>{userData.following.length || 0}</h2>
-                  <p>following</p>
-                </div>
-                <div>
-                  <h2>{posts.length}</h2>
-                  <p>posts</p>
-                </div>
-                <div>
-                  <h2>{posts.reduce((total, post) => total + post.likes.length, 0) || 0}</h2>
-                  <p>likes</p>
+
+              <div className="np-profile-identity" style={{ flex: 1 }}>
+                <h2 className="np-profile-name">{userData.username}</h2>
+                <span className="np-profile-handle">@{userData.username?.toLowerCase().replace(/\s+/g, '')}</span>
+
+                {/* Stats */}
+                <div className="np-profile-stats">
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{posts.length}</span>
+                    <span className="np-profile-stat-label">Posts</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{userData.followers?.length || 0}</span>
+                    <span className="np-profile-stat-label">Followers</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{userData.following?.length || 0}</span>
+                    <span className="np-profile-stat-label">Following</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">
+                      {posts.reduce((total, p) => total + (p.likes?.length || 0), 0)}
+                    </span>
+                    <span className="np-profile-stat-label">Likes</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </section>
-          <section id="section2_profile">
-            <div>
-              <p id="bio_profile">
-                {userData.bio || 'No bio available.'}{' '} <br />
-                {userData.bioLink && (
-                  <a style={{ color: 'blue' }} href={userData.bioLink} target="_blank" rel="noopener noreferrer">
-                    {userData.bioLink}
-                  </a>
-                )}
+
+            {/* Bio */}
+            <div className="np-profile-bio-section">
+              <p className="np-profile-bio-text">
+                {userData.bio || 'No bio yet.'}
               </p>
+              {userData.bioLink && (
+                <a
+                  href={userData.bioLink.startsWith('http') ? userData.bioLink : `https://${userData.bioLink}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="np-profile-bio-link"
+                >
+                  <i className="fa-solid fa-link" />
+                  {userData.bioLink}
+                </a>
+              )}
             </div>
-            <div>
-              <p>
-                <input
-                  type="button"
-                  defaultValue={userconnect?.following?.includes(id) ? 'Unfollow' : 'Follow'}
-                  className="profile_button"
-                  onClick={handleFollow}
-                />
-                <input type="button" defaultValue="Share Profile" className="profile_button" />
-              </p>
-            </div>
-          </section>
-          <section id="section3_profile">
-            <div id="button_nav">
-            <button className="nav_button" onClick={() => setCategory('')}>
-                <a id="a_profile" >
-                  <i id="i_profile" className="fa-solid fa-bars" />
-                </a>
+
+            {/* Actions: Follow / Message */}
+            <div className="np-profile-actions">
+              <button
+                type="button"
+                onClick={handleFollowToggle}
+                disabled={actionLoading}
+                className={`np-btn ${isFollowing ? 'np-btn-outline' : 'np-btn-primary'}`}
+              >
+                <i className={`fa-solid ${isFollowing ? 'fa-user-check' : 'fa-user-plus'}`} />
+                {isFollowing ? 'Following' : 'Follow'}
               </button>
-              <button className="nav_button" onClick={() => setCategory('videos')}>
-                <a id="a_profile">
-                  <i id="i_profile" className="fa-solid fa-film" />
-                </a>
-              </button>
-              <button className="nav_button" onClick={() => setCategory('images')}>
-                <a id="a_profile" >
-                  <i id="i_profile" className="fa-regular fa-images" />
-                </a>
-              </button>
+
+              <Link to="/Message" className="np-btn np-btn-outline">
+                <i className="fa-regular fa-comment-dots" /> Message
+              </Link>
             </div>
           </section>
-          <hr />
-          {/* Posts Section */}
-          <section id="section4_profile">
-            <div id="all_profile">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1%', justifyContent: 'center', alignItems: 'center' ,border:'1px solid black',width:'100%' }}>
-                {posts.filter((post) => category==""?post: category=="videos"?post.picture.split('.').at(-1)=="mp4":category=="images"?post.picture.split('.').at(-1)=="jpg"||post.picture.split('.').at(-1)=="png"||post.picture.split('.').at(-1)=="jpeg":category=="likes"?post.likes.includes(userData._id):null ).map((post) => (
-                  <Link to={`/openpost/${post._id}`}
+
+          {/* Tab Navigation */}
+          <div className="np-profile-tabs">
+            <button
+              type="button"
+              className={`np-profile-tab ${category === '' ? 'active' : ''}`}
+              onClick={() => setCategory('')}
+            >
+              <i className="fa-solid fa-table-cells" /> All Posts ({posts.length})
+            </button>
+            <button
+              type="button"
+              className={`np-profile-tab ${category === 'videos' ? 'active' : ''}`}
+              onClick={() => setCategory('videos')}
+            >
+              <i className="fa-solid fa-film" /> Videos
+            </button>
+            <button
+              type="button"
+              className={`np-profile-tab ${category === 'images' ? 'active' : ''}`}
+              onClick={() => setCategory('images')}
+            >
+              <i className="fa-regular fa-images" /> Photos
+            </button>
+          </div>
+
+          {/* Posts Grid */}
+          {filteredPosts.length === 0 ? (
+            <div className="np-empty-state" style={{ minHeight: '240px' }}>
+              <i className="fa-regular fa-folder-open np-empty-state-icon" />
+              <p className="np-empty-state-title">No posts yet</p>
+              <p className="np-empty-state-subtitle">This user hasn't posted any content in this category.</p>
+            </div>
+          ) : (
+            <div className="np-profile-grid">
+              {filteredPosts.map((post) => {
+                const isVideo = ['mp4', 'webm', 'mov'].includes(post.picture?.split('.').at(-1)?.toLowerCase());
+                return (
+                  <Link
+                    to={`/openpost/${post._id}`}
                     key={post._id}
-                    onClick={() => handlePostClick(post.picture)}
-                    className="post_thumbnail"
-                    style={{width:'32%',marginTop:'10px',justifyContent: 'center'}}
+                    className="np-profile-grid-item"
                   >
-                    {/* <img
-                      src={post.picture}
-                      alt={`Post ${post._id}`}
-                      className="post_image"
-                      style={{width:'100%',borderRadius:'10px'}}
-                    /> */}
-                    {post.picture.split('.').at(-1)=="mp4"? (
-                    
-                    <video 
-                    style={{width:'100%',borderRadius:'10px'}}
-                    src={post.picture} controls></video>):(
-                      <img 
-                      style={{width:'100%',borderRadius:'10px'}}
-                      src={post.picture}  alt="" />
-                    )
-                  }
-                  
+                    {isVideo ? (
+                      <video src={post.picture} muted playsInline />
+                    ) : (
+                      <img src={post.picture} alt={post.description || 'Post thumbnail'} loading="lazy" />
+                    )}
                   </Link>
-                  
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </section>
+          )}
+
           {/* Modal for Post Preview */}
           <Modal show={showModal} onClose={handleCloseModal}>
             {selectedImage && (
-              <img
-                src={selectedImage}
-                alt="Selected Post"
-                className="modal_image"
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '100%',
-                  objectFit: 'cover',
-                  borderRadius: '10px',
-                }}
-              />
+              <div>
+                <img
+                  src={selectedImage}
+                  alt="Selected Post"
+                  style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 'var(--radius-lg)' }}
+                />
+              </div>
             )}
           </Modal>
         </>
-      ) : (
-        <p>Loading profile data...</p>
       )}
     </div>
   );

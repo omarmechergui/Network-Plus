@@ -1,252 +1,288 @@
 import React, { useState, useEffect } from 'react';
-import Modal from './Modal';
 import { Link } from 'react-router-dom';
+import Modal from './Modal';
 
 function Profile() {
-  const [userData, setUserData] = useState(null); // State for user profile data
-  const [posts, setPosts] = useState([]); // State for user posts
-  const [loading, setLoading] = useState(true); // State for loading indicator
-  const [error, setError] = useState(null); // State for error messages
-  const [showModal, setShowModal] = useState(false); // State for modal visibility
-  const [selectedImage, setSelectedImage] = useState(null); // State for selected post image
+  const [userData, setUserData] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [likedPosts, setLikedPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [category, setCategory] = useState('');
-  const [allposts, setAllPosts] = useState([]);
 
-
-
-
-  // Fetch user data and posts from the backend when the component mounts
   useEffect(() => {
-    const fetchUserData = async () => {
+    let isMounted = true;
+
+    const loadProfileAndPosts = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5000/api/users/getuser', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-          },
-        });
-        
-        const data = await response.json();
-        console.log(data);
-        if (response.ok) {
-          setUserData(data.user);
-          setPosts(data.posts || []); // Ensure posts array is initialized
-        } else {
-          throw new Error(data.message || 'Failed to fetch profile data.');
+        setError(null);
+
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+        // 1. Fetch current user data and their posts
+        const userRes = await fetch('http://localhost:5000/api/users/getuser', { headers });
+        const userDataJson = await userRes.json();
+
+        if (!userRes.ok) {
+          throw new Error(userDataJson.message || 'Failed to fetch profile data.');
+        }
+
+        if (isMounted) {
+          setUserData(userDataJson.user);
+          setPosts(userDataJson.posts || []);
+        }
+
+        // 2. Fetch all posts to filter for liked posts
+        const postsRes = await fetch('http://localhost:5000/api/posts', { headers });
+        const allPostsJson = await postsRes.json();
+
+        if (postsRes.ok && Array.isArray(allPostsJson) && userDataJson.user?._id) {
+          const currentUserId = userDataJson.user._id;
+          const userLiked = allPostsJson.filter((p) =>
+            p.likes && p.likes.some((like) => (typeof like === 'object' ? like._id === currentUserId : like === currentUserId))
+          );
+          if (isMounted) {
+            setLikedPosts(userLiked);
+          }
         }
       } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    const fetchAllPosts = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:5000/api/posts', {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`, // Replace with actual token logic
-          },
-        });
-        const data = await response.json();
-        console.log(data)
-        if (response.ok) {
-          
-          setAllPosts(data.filter(el=>el.likes.find(e=>e._id==userData._id)));
-        } else {
-          throw new Error(data.message || 'Failed to fetch posts.');
+        if (isMounted) {
+          setError(err.message || 'An error occurred while loading profile.');
         }
-      } catch (err) {
-        setError(err.message);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchUserData();
-    fetchAllPosts();
-  }, [allposts]);
-console.log(allposts)
-  // Handle post click to open modal
-  const handlePostClick = (src) => {
-    // setSelectedImage(src);
-    // setShowModal(true);
-    
-  };
+    loadProfileAndPosts();
 
-  // Handle modal close
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Run once on mount to eliminate infinite loop bug
+
   const handleCloseModal = () => {
     setShowModal(false);
     setSelectedImage(null);
   };
 
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `${userData?.username || 'User'} on Network Plus`,
+        url: window.location.href,
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(window.location.href);
+      alert('Profile link copied to clipboard!');
+    }
+  };
+
+  // Determine which posts array to filter
+  const currentPostPool = category === 'likes' ? likedPosts : posts;
+
+  const filteredPosts = currentPostPool.filter((post) => {
+    if (!post || !post.picture) return false;
+    const ext = post.picture.split('.').at(-1)?.toLowerCase();
+    if (category === '') return true;
+    if (category === 'videos') return ext === 'mp4' || ext === 'webm' || ext === 'mov';
+    if (category === 'images') return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+    if (category === 'likes') return true;
+    return true;
+  });
+
   return (
-    <div id="body_profile">
-      {/* Loading Indicator */}
-      {loading && <p className="loading">Loading profile...</p>}
-
-      
-
-      {/* Header */}
-      <header id="header_profile">
-        <div>
-          <a id="a_profile" href="/Home">
-            <i className="fa-solid fa-arrow-left" />
-          </a>
-          <span>
-            <h1 id="network">
-              Network <span id="plus">Plus</span>
-            </h1>
-          </span>
-          <span>
-            <a id="a_profile" href="/Eye">
-              <i className="fa-solid fa-eye" />
-            </a>
-            <a id="a_profile" href="/Settings">
-              <i className="fa-solid fa-gear" />
-            </a>
-          </span>
+    <div className="np-profile-page">
+      {/* Top Header Bar */}
+      <div className="np-profile-top-bar">
+        <Link to="/" className="np-btn np-btn-ghost np-btn-icon" aria-label="Go back">
+          <i className="fa-solid fa-arrow-left" />
+        </Link>
+        <h1 className="np-top-nav-logo" style={{ margin: 0 }}>
+          Network <span className="np-top-nav-logo-plus">Plus</span>
+        </h1>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <Link to="/Settings" className="np-btn np-btn-ghost np-btn-icon" aria-label="Settings">
+            <i className="fa-solid fa-gear" />
+          </Link>
         </div>
-      </header>
+      </div>
 
-      {/* Profile Section */}
-      {userData ? (
+      {loading && (
+        <div className="np-loading-state" style={{ minHeight: '200px' }}>
+          <div className="np-spinner" />
+          <p>Loading profile...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="np-error-state">
+          <i className="fa-solid fa-circle-exclamation np-error-state-icon" />
+          <p className="np-error-state-title">{error}</p>
+          <button onClick={() => window.location.reload()} className="np-btn np-btn-primary">
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!loading && userData && (
         <>
-          <section id="section1_profile">
-            <div id="div_profile">
-              <div>
+          {/* Profile Header Card */}
+          <section className="np-profile-header-card">
+            <div className="np-profile-main-info">
+              <div className="np-profile-avatar-wrap">
                 <img
-                  src={userData.profilePicture }
+                  src={userData.profilePicture || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_640.png'}
                   alt={`${userData.username}'s profile`}
-                  id="profile_image"
+                  className="np-profile-avatar-lg"
                 />
-                <br />
-                <h3 id="username">{userData.username}</h3>
               </div>
-              <div id="div1_profile">
-                <div>
-                  <h2>{userData.followers.length || 0}</h2>
-                  <p>followers</p>
-                </div>
-                <div>
-                  <h2>{userData.following.length || 0}</h2>
-                  <p>following</p>
-                </div>
-                <div>
-                  <h2>{posts.length}</h2>
-                  <p>posts</p>
-                </div>
-                <div>
-                  <h2>{posts.reduce((total, post) => total + post.likes.length, 0) || 0}</h2>
-                  <p>likes</p>
+
+              <div className="np-profile-identity" style={{ flex: 1 }}>
+                <h2 className="np-profile-name">{userData.username}</h2>
+                <span className="np-profile-handle">@{userData.username?.toLowerCase().replace(/\s+/g, '')}</span>
+
+                {/* Stats */}
+                <div className="np-profile-stats">
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{posts.length}</span>
+                    <span className="np-profile-stat-label">Posts</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{userData.followers?.length || 0}</span>
+                    <span className="np-profile-stat-label">Followers</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">{userData.following?.length || 0}</span>
+                    <span className="np-profile-stat-label">Following</span>
+                  </div>
+                  <div className="np-profile-stat">
+                    <span className="np-profile-stat-num">
+                      {posts.reduce((total, p) => total + (p.likes?.length || 0), 0)}
+                    </span>
+                    <span className="np-profile-stat-label">Likes</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </section>
 
-          <section id="section2_profile">
-            <div>
-              <p id="bio_profile">
-                {userData.bio || 'No bio available.'}{' '} <br />
-                {userData.bioLink && (
-                  <a style={{ color: 'blue' }} href={userData.bioLink} target="_blank" rel="noopener noreferrer">
-                    {userData.bioLink}
-                  </a>
-                )}
+            {/* Bio */}
+            <div className="np-profile-bio-section">
+              <p className="np-profile-bio-text">
+                {userData.bio || 'No bio yet.'}
               </p>
+              {userData.bioLink && (
+                <a
+                  href={userData.bioLink.startsWith('http') ? userData.bioLink : `https://${userData.bioLink}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="np-profile-bio-link"
+                >
+                  <i className="fa-solid fa-link" />
+                  {userData.bioLink}
+                </a>
+              )}
             </div>
-            <div>
-              <p>
-                <a href="/EditProfile">
-                  <input type="button" defaultValue="Edit Profile" className="profile_button" />
-                </a>{' '}
-                <input type="button" defaultValue="Share Profile" className="profile_button" />
+
+            {/* Action Buttons */}
+            <div className="np-profile-actions">
+              <Link to="/EditProfile" className="np-btn np-btn-primary">
+                <i className="fa-solid fa-user-pen" /> Edit Profile
+              </Link>
+              <button type="button" onClick={handleShare} className="np-btn np-btn-outline">
+                <i className="fa-solid fa-share-nodes" /> Share Profile
+              </button>
+            </div>
+          </section>
+
+          {/* Tab Navigation */}
+          <div className="np-profile-tabs">
+            <button
+              type="button"
+              className={`np-profile-tab ${category === '' ? 'active' : ''}`}
+              onClick={() => setCategory('')}
+            >
+              <i className="fa-solid fa-table-cells" /> All Posts ({posts.length})
+            </button>
+            <button
+              type="button"
+              className={`np-profile-tab ${category === 'videos' ? 'active' : ''}`}
+              onClick={() => setCategory('videos')}
+            >
+              <i className="fa-solid fa-film" /> Videos
+            </button>
+            <button
+              type="button"
+              className={`np-profile-tab ${category === 'images' ? 'active' : ''}`}
+              onClick={() => setCategory('images')}
+            >
+              <i className="fa-regular fa-images" /> Photos
+            </button>
+            <button
+              type="button"
+              className={`np-profile-tab ${category === 'likes' ? 'active' : ''}`}
+              onClick={() => setCategory('likes')}
+            >
+              <i className="fa-solid fa-heart" /> Liked ({likedPosts.length})
+            </button>
+          </div>
+
+          {/* Posts Grid */}
+          {filteredPosts.length === 0 ? (
+            <div className="np-empty-state" style={{ minHeight: '240px' }}>
+              <i className="fa-regular fa-folder-open np-empty-state-icon" />
+              <p className="np-empty-state-title">No posts found</p>
+              <p className="np-empty-state-subtitle">
+                {category === 'likes'
+                  ? 'Posts you have liked will show up here.'
+                  : 'Start sharing your photos and videos with your network.'}
               </p>
+              {category !== 'likes' && (
+                <Link to="/AddPost" className="np-btn np-btn-primary" style={{ marginTop: 'var(--space-3)' }}>
+                  Create First Post
+                </Link>
+              )}
             </div>
-          </section>
-
-          <section id="section3_profile">
-            <div id="button_nav">
-              <button className="nav_button" onClick={() => setCategory('')}>
-                <a id="a_profile" >
-                  <i id="i_profile" className="fa-solid fa-bars" />
-                </a>
-              </button>
-              <button className="nav_button" onClick={() => setCategory('videos')}>
-                <a id="a_profile">
-                  <i id="i_profile" className="fa-solid fa-film" />
-                </a>
-              </button>
-              <button className="nav_button" onClick={() => setCategory('images')}>
-                <a id="a_profile" >
-                  <i id="i_profile" className="fa-regular fa-images" />
-                </a>
-              </button>
-              <button className="nav_button" onClick={() => setCategory('likes')}>
-                <a id="a_profile" >
-                  <i id="i_profile" className="fa-solid fa-heart" />
-                </a>
-              </button>
-            </div>
-          </section>
-
-          <hr />
-
-          {/* Posts Section */}
-          <section id="section4_profile">
-            <div id="all_profile">
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1%', justifyContent: 'center', alignItems: 'center' ,border:'1px solid black',width:'100%' }}>
-                {posts.filter((post) => category==""?post: category=="videos"?post.picture.split('.').at(-1)=="mp4":category=="images"?post.picture.split('.').at(-1)=="jpg"||post.picture.split('.').at(-1)=="png"||post.picture.split('.').at(-1)=="jpeg":category=="likes"?post.likes.includes(userData._id):null ).map((post) => (
-                  <Link to={`/openpost/${post._id}`}
+          ) : (
+            <div className="np-profile-grid">
+              {filteredPosts.map((post) => {
+                const isVideo = ['mp4', 'webm', 'mov'].includes(post.picture?.split('.').at(-1)?.toLowerCase());
+                return (
+                  <Link
+                    to={`/openpost/${post._id}`}
                     key={post._id}
-                    onClick={() => handlePostClick(post.picture)}
-                    className="post_thumbnail"
-                    style={{width:'32%',marginTop:'10px',justifyContent: 'center'}}
+                    className="np-profile-grid-item"
                   >
-                    {/* <img
-                      src={post.picture}
-                      alt={`Post ${post._id}`}
-                      className="post_image"
-                      style={{width:'100%',borderRadius:'10px'}}
-                    /> */}
-                    {post.picture.split('.').at(-1)=="mp4"? (
-                    
-                    <video 
-                    style={{width:'100%',borderRadius:'10px'}}
-                    src={post.picture} controls></video>):(
-                      <img 
-                      style={{width:'100%',borderRadius:'10px'}}
-                      src={post.picture}  alt="" />
-                    )
-                  }
-                  
+                    {isVideo ? (
+                      <video src={post.picture} muted playsInline />
+                    ) : (
+                      <img src={post.picture} alt={post.description || 'Post thumbnail'} loading="lazy" />
+                    )}
                   </Link>
-                  
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </section>
+          )}
 
           {/* Modal for Post Preview */}
           <Modal show={showModal} onClose={handleCloseModal}>
             {selectedImage && (
               <div>
-              <img
-                src={selectedImage}
-                alt="Selected Post"
-                className="modal_image"
-                style={{maxWidth: '100%', maxHeight: '100%', objectFit: 'cover',borderRadius:'10px'}}
-              />
-              <div>
-                
+                <img
+                  src={selectedImage}
+                  alt="Selected Post"
+                  style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 'var(--radius-lg)' }}
+                />
               </div>
-              </div>
-              
             )}
           </Modal>
         </>
-      ) : (
-        <p>Loading profile data...</p>
       )}
     </div>
   );

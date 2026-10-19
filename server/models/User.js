@@ -12,4 +12,18 @@ const userSchema = new mongoose.Schema({
   bio: { type: String, default: '' },
 }, { timestamps: true });
 
+userSchema.set('toJSON', {
+  transform: function (doc, ret) {
+    delete ret.password;
+    return ret;
+  }
+});
+
+userSchema.set('toObject', {
+  transform: function (doc, ret) {
+    delete ret.password;
+    return ret;
+  }
+});
+
 module.exports = mongoose.model('User', userSchema);
